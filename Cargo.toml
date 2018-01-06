@@ -1,0 +1,10 @@
+[package]
+name = "space-habitats"
+version = "0.1.0"
+authors = ["Tim DuBois <tim@neophilus.net>"]
+
+[dependencies]
+kiss3d = "0.12"
+nalgebra = "0.13"
+rand = "0.4"
+#glfw = "0.19"
