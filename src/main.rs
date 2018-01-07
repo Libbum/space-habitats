@@ -11,18 +11,47 @@ use kiss3d::light::Light;
 #[derive(Debug)]
 struct Room {
     name: String,
-    size: f32,
-    color: (f32, f32, f32),
-    position: Translation3<f32>,
+    radius: f32,
+    color: Color,
+    position: Point3<f32>,
 }
 
 impl Room {
-    fn new(name: &str, size: f32, color: (f32, f32, f32), position: Translation3<f32>) -> Room {
+    fn new(name: &str, radius: f32, color: Color, position: Point3<f32>) -> Room {
         Room {
             name: name.to_string(),
-            size: size,
+            radius: radius,
             color: color,
             position: position,
+        }
+    }
+}
+
+
+#[derive(Debug)]
+struct Color {
+    red: f32,
+    green: f32,
+    blue: f32,
+}
+
+impl Color {
+    fn new(red: f32, green: f32, blue: f32) -> Color {
+        Color {
+            red: red,
+            green: green,
+            blue: blue,
+        }
+    }
+}
+
+fn find_disjoint_position(from: &Vec<Room>, distance: f32, between: &Range<f32>, rng: &mut rand::ThreadRng) -> Point3<f32> {
+    let mut new_point = Point3::new(between.ind_sample(rng), between.ind_sample(rng), between.ind_sample(rng));
+    loop {
+        if from.iter().any(|ref r| nalgebra::distance(&new_point, &r.position) < distance) {
+            new_point = Point3::new(between.ind_sample(rng), between.ind_sample(rng), between.ind_sample(rng));
+        } else {
+            return new_point;
         }
     }
 }
@@ -31,66 +60,57 @@ fn construct_rooms() -> Vec<Room> {
     let between = Range::new(-1.5, 1.5);
     let mut rng = rand::thread_rng();
 
+    //For now, this is hardcoded since it's known, but later this will need to be identified first
+    let max_distance = 1.2; //Radius of Sleep + Leisure
+
     let mut rooms = Vec::new();
+    let mut new_position = Point3::new(between.ind_sample(&mut rng), between.ind_sample(&mut rng), between.ind_sample(&mut rng));
+
     rooms.push(Room::new(
         "Sleep",
         0.7,
-        (0.8941, 0.1020, 0.1098),
-        Translation3::new(
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-        ),
+        Color::new(0.8941, 0.1020, 0.1098),
+        new_position,
     ));
+
+    new_position = find_disjoint_position(&rooms, max_distance, &between, &mut rng);
     rooms.push(Room::new(
         "Leisure",
         0.5,
-        (0.2157, 0.4941, 0.7216),
-        Translation3::new(
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-        ),
+        Color::new(0.2157, 0.4941, 0.7216),
+        new_position,
     ));
+
+    new_position = find_disjoint_position(&rooms, max_distance, &between, &mut rng);
     rooms.push(Room::new(
         "Food",
         0.35,
-        (0.3020, 0.6863, 0.2902),
-        Translation3::new(
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-        ),
+        Color::new(0.3020, 0.6863, 0.2902),
+        new_position,
     ));
+
+    new_position = find_disjoint_position(&rooms, max_distance, &between, &mut rng);
     rooms.push(Room::new(
         "Work/Lab",
         0.35,
-        (0.5961, 0.3059, 0.6392),
-        Translation3::new(
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-        ),
+        Color::new(0.5961, 0.3059, 0.6392),
+        new_position,
     ));
+
+    new_position = find_disjoint_position(&rooms, max_distance, &between, &mut rng);
     rooms.push(Room::new(
         "Greenhouse",
         0.25,
-        (1.0, 0.4980, 0.0),
-        Translation3::new(
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-        ),
+        Color::new(1.0, 0.4980, 0.0),
+        new_position,
     ));
+
+    new_position = find_disjoint_position(&rooms, max_distance, &between, &mut rng);
     rooms.push(Room::new(
         "Sport",
         0.4,
-        (1.0, 1.0, 0.2),
-        Translation3::new(
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-            between.ind_sample(&mut rng),
-        ),
+        Color::new(1.0, 1.0, 0.2),
+        new_position,
     ));
     rooms
 }
@@ -107,9 +127,9 @@ fn main() {
     window.set_light(Light::StickToCamera);
 
     for room in habitat.iter() {
-        let mut draw_room = window.add_sphere(room.size);
-        draw_room.set_color(room.color.0, room.color.1, room.color.2);
-        draw_room.set_local_translation(room.position);
+        let mut draw_room = window.add_sphere(room.radius);
+        draw_room.set_color(room.color.red, room.color.green, room.color.blue);
+        draw_room.set_local_translation(Translation3::from_vector(room.position.coords));
     }
 
     let rot = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.014);
