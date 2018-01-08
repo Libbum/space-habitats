@@ -1,8 +1,10 @@
-use nalgebra::{Vector3, Point3};
+use nalgebra::{self, Point3};
+use rand::{self, Rng};
+use std::iter::repeat;
 use std::collections::VecDeque;
 use std::f32::{MIN, MAX};
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug, Clone)]
 /// Constructs a sphere located at `center` in Euclidean space with a given `radius`.
 pub struct Sphere {
     /// Central point in space where this sphere is located.
@@ -18,6 +20,33 @@ impl Sphere {
             center: center,
             radius: radius,
         }
+    }
+}
+
+trait Bounded<T> {
+    /// Checks if an object exists inside some bounding geometry.
+    fn is_bounded(&self, container: &T) -> bool;
+}
+
+impl Bounded<Sphere> for Sphere {
+    /// Checks if an object exists inside some bounding geometry.
+    fn is_bounded(&self, container: &Sphere) -> bool {
+        nalgebra::distance(&Point3::origin(), &self.center) + self.radius < container.radius
+    }
+}
+
+#[derive(Debug)]
+/// Defines an active front.
+struct Front {
+    /// Central point in space where this sphere is located.
+    spheres: Vec<Sphere>,
+}
+
+impl Front {
+    /// Creates a `new` front, expected to be called after `init_spheres`, taking a copy
+    /// of the output.
+    pub fn new(spheres: Vec<Sphere>) -> Front {
+        Front { spheres: spheres }
     }
 }
 
@@ -88,6 +117,87 @@ pub fn pack_spheres(container: Sphere, mut all_radii: VecDeque<f32>) -> Vec<Sphe
     //Take first three for initialisation, keep the rest.
     let mut radii = all_radii.split_off(3);
 
+    // S := {s₁, s₂, s₃}
     let mut spheres = init_spheres(all_radii);
+
+    // F := {s₁, s₂, s₃}
+    let mut front = Front::new(spheres.clone());
+
+    let mut new_radius = radii.pop_front().unwrap_or_default();
+    let mut rng = rand::thread_rng();
+
+    'outer: while !front.spheres.is_empty() {
+        // s₀ := s(c₀, r₀) picked at random
+        let curr_sphere = rng.choose(&spheres).unwrap().clone();
+        // V := {s(c', r') ∈ S : d(c₀, c') ≤ r₀ + r' + 2r}
+        let set_v = spheres
+            .clone()
+            .into_iter()
+            .filter(|s_dash| {
+                nalgebra::distance(&curr_sphere.center, &s_dash.center) <=
+                    curr_sphere.radius + s_dash.radius + 2. * new_radius
+            })
+            .collect::<Vec<_>>();
+
+        println!("---- {}", front.spheres.len());
+        for (s_i, s_j) in pairs(&set_v) {
+            println!("{}, {}", s_i.radius, s_j.radius);
+            let mut set_f = identify_f(&curr_sphere, s_i, s_j, &container, &set_v, new_radius);
+            if !set_f.is_empty() {
+                // Found at least one position to place the sphere,
+                // choose one and move on
+                let s_new = rng.choose(&set_f).unwrap();
+                front.spheres.push(s_new.clone());
+                spheres.push(s_new.clone());
+                new_radius = radii.pop_front().unwrap_or_default();
+                continue 'outer;
+            }
+        }
+        // This is a nightly function only
+        front.spheres.remove_item(&curr_sphere);
+    }
     spheres
+}
+
+
+/// $f$ is as a set of spheres (or the empty set) such that they have a known `radius`,
+/// are in outer contact with `s_1`, `s_2` and `s_3` simultaneously, are completely
+/// contained in `container` and do not overlap with any element of `set_v`.
+/// The set f has at most two elements, because there exist at most two spheres with
+/// `radius` in outer contact with `s_1`, `s_2` and `s_3` simultaneously.
+fn identify_f(
+    s_1: &Sphere,
+    s_2: &Sphere,
+    s_3: &Sphere,
+    container: &Sphere,
+    set_v: &Vec<Sphere>,
+    radius: f32,
+) -> Vec<Sphere> {
+    let mut f = Vec::new();
+    let test = s_1.is_bounded(container);
+    f
+}
+
+/// Calculates all possible pairs of a `set` of values.
+fn pairs(set: &[Sphere]) -> Vec<(&Sphere, &Sphere)> {
+    let n = set.len();
+
+    if n == 2 {
+        let mut minimal = Vec::new();
+        minimal.push((&set[0], &set[1]));
+        minimal
+    } else {
+        let mut vec_pairs = Vec::new();
+        if n > 2 {
+            // 0..n - m, but m = 2 and rust is non inclusive with its for loops
+            for k in 0..n - 1 {
+                let subset = &set[k + 1..n];
+                vec_pairs.append(&mut subset
+                    .iter()
+                    .zip(repeat(&set[k]).take(subset.len()))
+                    .collect::<Vec<_>>());
+            }
+        }
+        vec_pairs
+    }
 }

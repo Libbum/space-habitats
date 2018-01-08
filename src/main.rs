@@ -4,6 +4,8 @@
 //!
 //! Valentina Sumini and Caitlin Mueller, Proceedings of the International Association for Shell and Spatial Structures (IASS) Symposium, 2017
 
+#![feature(vec_remove_item)]
+
 extern crate kiss3d;
 extern crate nalgebra;
 extern crate rand;
