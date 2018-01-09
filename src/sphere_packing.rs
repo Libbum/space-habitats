@@ -1,4 +1,4 @@
-use nalgebra::{self, Point3};
+use nalgebra::{self, Point3, Translation3};
 use rand::{self, Rng};
 use std::iter::repeat;
 use std::collections::VecDeque;
@@ -21,6 +21,12 @@ impl Sphere {
             radius: radius,
         }
     }
+
+    /// If the distance between the centers of two spheres is less than the sum of
+    /// their radii, we can consider them to be overlapping. Will return `true` in this case.
+    fn overlaps(&self, other: &Sphere) -> bool {
+        nalgebra::distance(&self.center, &other.center) < self.radius + other.radius
+    }
 }
 
 trait Bounded<T> {
@@ -36,7 +42,8 @@ impl Bounded<Sphere> for Sphere {
 }
 
 #[derive(Debug)]
-/// Defines an active front.
+/// Defines an active front. NOTE: I thought this may have required a little more machinery that
+/// it currenly requires, so we may demote this soon.
 struct Front {
     /// Central point in space where this sphere is located.
     spheres: Vec<Sphere>,
@@ -116,6 +123,7 @@ pub fn pack_spheres(container: Sphere, mut all_radii: VecDeque<f32>) -> Vec<Sphe
 
     //Take first three for initialisation, keep the rest.
     let mut radii = all_radii.split_off(3);
+    println!("{:?}", radii);
 
     // S := {s₁, s₂, s₃}
     let mut spheres = init_spheres(all_radii);
@@ -139,9 +147,7 @@ pub fn pack_spheres(container: Sphere, mut all_radii: VecDeque<f32>) -> Vec<Sphe
             })
             .collect::<Vec<_>>();
 
-        println!("---- {}", front.spheres.len());
         for (s_i, s_j) in pairs(&set_v) {
-            println!("{}, {}", s_i.radius, s_j.radius);
             let mut set_f = identify_f(&curr_sphere, s_i, s_j, &container, &set_v, new_radius);
             if !set_f.is_empty() {
                 // Found at least one position to place the sphere,
@@ -173,8 +179,49 @@ fn identify_f(
     set_v: &Vec<Sphere>,
     radius: f32,
 ) -> Vec<Sphere> {
+
+    // If we use (mostly) the same conventions as `init_spheres`, we start
+    // with a base triangle at s_1=A(0,0,0), s_2=B(c,0,0), s_3=C(e,f.0) and look for solutions
+    // to s_4=D(x,y,z). Let AD=m, BD=n, CD=p we arrive at the equations
+    // x²+y²+z²=m²; (x−c)²+y²+z²=n²; (x−e)²+(y−f)²+z²=p². This doesn't give us the
+    // simplest solution to z, but it is what it is...
+
+    // First, translate our spheres onto this cordinate system so we can use these minimal equations
+    let value_c = s_1.radius + s_2.radius;
+    let value_e = ((s_1.radius + s_3.radius).powi(2) + value_c.powi(2) - (s_2.radius + s_3.radius).powi(2)) / (2. * value_c);
+    let value_f = ((s_1.radius + s_3.radius).powi(2) - value_e.powi(2)).sqrt();
+    let reset_a = Translation3::new(-s_1.center.coords.x, -s_1.center.coords.y, -s_1.center.coords.z);
+    let reset_b = Translation3::new(-s_2.center.coords.x + value_c, -s_2.center.coords.y, -s_2.center.coords.z);
+    let reset_c = Translation3::new(-s_3.center.coords.x + value_e, -s_3.center.coords.y + value_e, -s_3.center.coords.z);
+    let center_a = reset_a * s_1.center;
+    let center_b = reset_b * s_2.center;
+    let center_c = reset_c * s_3.center;
+    println!("A {:?}, B {:?}, C {:?}", s_1, s_2, s_3);
+    println!("A' {}, B' {}, C' {}", center_a, center_b, center_c);
+    //let value_e = s_3.center.x;
+    //let value_f = s_3.center.y;
+    let distance_m = s_1.radius + radius;
+    let distance_n = s_2.radius + radius;
+    let distance_p = s_3.radius + radius;
+
+    let x = (distance_m.powi(2) - distance_n.powi(2) + value_c.powi(2)) / (2. * value_c);
+    let y = (value_f.powi(2) * value_c + distance_m.powi(2) * value_c -
+                 value_e * distance_m.powi(2) + value_e * distance_n.powi(2) -
+                 distance_p.powi(2) * value_c - value_e * value_c.powi(2) +
+                 value_e.powi(2) * value_c) / (2. * value_f * value_c);
+    let z = (distance_m.powi(2) - x.powi(2) - y.powi(2)).sqrt();
+
+    let s_4_positive = Sphere::new(reset_c * Point3::new(x, y, z), radius);
+    let s_4_negative = Sphere::new(reset_c * Point3::new(x, y, -z), radius);
+
+    println!("C {}, C' {} {} 0, D {}", s_3.center, value_e, value_f, s_4_positive.center);
     let mut f = Vec::new();
-    let test = s_1.is_bounded(container);
+    if s_4_positive.is_bounded(container) && !set_v.iter().any(|v| v.overlaps(&s_4_positive)) {
+        f.push(s_4_positive);
+    }
+    if s_4_negative.is_bounded(container) && !set_v.iter().any(|v| v.overlaps(&s_4_negative)) {
+        f.push(s_4_negative);
+    }
     f
 }
 
