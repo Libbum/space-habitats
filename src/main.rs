@@ -181,8 +181,10 @@ fn main() {
 
     //---------------------------------
 
-    let boundary = Sphere::new(at, 10.0);
-    let radii: VecDeque<f32> = vec![0.7, 0.5, 0.35, 0.35, 0.25, 0.4, 0.7, 0.5, 0.35, 0.35, 0.25, 0.4].into_iter().collect();
+    let boundary = Sphere::new(at, 20.0);
+    let radii: VecDeque<f32> = vec![0.7, 0.5, 0.35, 0.35, 0.25, 0.4, 0.5, 0.35, 0.35, 0.25, 0.4]
+        .into_iter()
+        .collect();
 
     let spheres = pack_spheres(boundary, radii);
     for sphere in spheres.iter() {
