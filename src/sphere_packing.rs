@@ -4,7 +4,6 @@ use nalgebra::geometry::Rotation3;
 use rand::{self, Rng};
 use std::iter::repeat;
 use std::collections::VecDeque;
-use std::f32::{MIN, MAX};
 
 #[derive(PartialEq, Debug, Clone)]
 /// Constructs a sphere located at `center` in Euclidean space with a given `radius`.
@@ -43,22 +42,6 @@ impl Bounded<Sphere> for Sphere {
     }
 }
 
-#[derive(Debug)]
-/// Defines an active front. NOTE: I thought this may have required a little more machinery that
-/// it currenly requires, so we may demote this soon.
-struct Front {
-    /// Central point in space where this sphere is located.
-    spheres: Vec<Sphere>,
-}
-
-impl Front {
-    /// Creates a `new` front, expected to be called after `init_spheres`, taking a copy
-    /// of the output.
-    pub fn new(spheres: Vec<Sphere>) -> Front {
-        Front { spheres: spheres }
-    }
-}
-
 /// Creates three initial spheres that are tangent pairwise. The incenter of the triangle formed
 /// by verticies located at the centers of each sphere is aligned at the origin.
 fn init_spheres(mut radii: VecDeque<f32>) -> Vec<Sphere> {
@@ -91,7 +74,8 @@ fn init_spheres(mut radii: VecDeque<f32>) -> Vec<Sphere> {
     let incenter_y = (distance_c * y) / perimeter;
 
     // Create spheres at positions shown in the diagram above, but offset such
-    // that the incenter is now the origin
+    // that the incenter is now the origin. This offset isn't entirely needed, but
+    // positions us better for the camera when viewing the resultant packing.
     init.push(Sphere::new(
         Point3::new(-incenter_x, -incenter_y, 0.),
         radius_a,
@@ -113,16 +97,6 @@ fn init_spheres(mut radii: VecDeque<f32>) -> Vec<Sphere> {
 /// Additionally, the `container` can be arbitrary geometry, but we'll just provide a large sphere for
 /// simplicity,
 pub fn pack_spheres(container: Sphere, mut all_radii: VecDeque<f32>) -> Vec<Sphere> {
-    let mut r_min = MIN;
-    let mut r_max = MAX;
-
-    for radius in all_radii.iter() {
-        if radius.is_finite() {
-            r_min = r_min.min(*radius);
-            r_max = r_max.max(*radius);
-        }
-    }
-
     //Take first three for initialisation, keep the rest.
     let mut radii = all_radii.split_off(3);
 
@@ -130,14 +104,14 @@ pub fn pack_spheres(container: Sphere, mut all_radii: VecDeque<f32>) -> Vec<Sphe
     let mut spheres = init_spheres(all_radii);
 
     // F := {s₁, s₂, s₃}
-    let mut front = Front::new(spheres.clone());
+    let mut front = spheres.clone();
 
     let mut new_radius = radii.pop_front().unwrap_or_default();
     let mut rng = rand::thread_rng();
 
-    'outer: while !front.spheres.is_empty() {
-        // s₀ := s(c₀, r₀) picked at random
-        let curr_sphere = rng.choose(&spheres).unwrap().clone();
+    'outer: while !front.is_empty() {
+        // s₀ := s(c₀, r₀) picked at random from F
+        let curr_sphere = rng.choose(&front).unwrap().clone();
         // V := {s(c', r') ∈ S : d(c₀, c') ≤ r₀ + r' + 2r}
         let set_v = spheres
             .clone()
@@ -155,14 +129,21 @@ pub fn pack_spheres(container: Sphere, mut all_radii: VecDeque<f32>) -> Vec<Sphe
                 // Found at least one position to place the sphere,
                 // choose one and move on
                 let s_new = rng.choose(&set_f).unwrap();
-                front.spheres.push(s_new.clone());
+                front.push(s_new.clone());
                 spheres.push(s_new.clone());
                 new_radius = radii.pop_front().unwrap_or_default();
+                println!(
+                    "A {:?}, B {:?}, C {:?}, D {:?}",
+                    curr_sphere,
+                    s_i,
+                    s_j,
+                    s_new
+                );
                 continue 'outer;
             }
         }
         // This is a nightly function only
-        front.spheres.remove_item(&curr_sphere);
+        front.remove_item(&curr_sphere);
     }
     spheres
 }
@@ -188,18 +169,17 @@ fn identify_f(
     // x²+y²+z²=m²; (x−c)²+y²+z²=n²; (x−e)²+(y−f)²+z²=p². This doesn't give us the
     // simplest solution to z, but it is what it is...
 
+    let empty = Vector3::new(0., 0., 0.); // A helper value, since nalgebra doesn't seem to have a method that's helpful here
+    // Remove ABC's translation component to compare rotation axes
+    let origin_b = s_2.center - s_1.center;
+    let origin_c = s_3.center - s_1.center;
+
     // Identify trapezoid locations in the simplified basis
     let (mut vector_ef, mut vector_eg, mut vector_ehp, mut vector_ehn) =
         generate_trapezoids(&s_1.radius, &s_2.radius, &s_3.radius, &radius);
 
     // Trapezoid tips must now be translated to D in the the ABCD coordinate system.
     // We denote x,y,z as H in trapeziod EFGH, setting E=A.
-
-    // Remove ABC's translation component to compare rotation axes
-    let origin_b = s_2.center - s_1.center;
-    let origin_c = s_3.center - s_1.center;
-
-    let empty = Vector3::new(0., 0., 0.); // A helper value, since nalgebra doesn't seem to have a method that's helpful here
 
     // Rotate EF onto AB
     let cross_ef_ab = Matrix::cross(&vector_ef.coords, &origin_b);

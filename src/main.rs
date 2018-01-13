@@ -21,6 +21,7 @@ use kiss3d::camera::ArcBall;
 use kiss3d::window::Window;
 use kiss3d::light::Light;
 use sphere_packing::{Sphere, pack_spheres};
+//use std::iter::repeat;
 
 #[derive(Debug)]
 /// Sample room structure for testing. May be removed or significantly altered in the future.
@@ -180,9 +181,12 @@ fn main() {
     //}
 
     //---------------------------------
+    //let between = Range::new(0.1, 0.5);
+    //let mut rng = rand::thread_rng();
+    //let radii = repeat(between.ind_sample(&mut rng)).take(1000).collect::<VecDeque<f32>>();
 
-    let boundary = Sphere::new(at, 20.0);
-    let radii: VecDeque<f32> = vec![0.7, 0.5, 0.35, 0.35, 0.25, 0.4, 0.5, 0.35, 0.35, 0.25, 0.4]
+    let boundary = Sphere::new(at, 2.0);
+    let radii: VecDeque<f32> = vec![0.7, 0.5, 0.35, 0.35, 0.25, 0.4]
         .into_iter()
         .collect();
 
