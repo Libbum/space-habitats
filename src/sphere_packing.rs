@@ -173,20 +173,33 @@ fn identify_f(
     // Remove ABC's translation component to compare rotation axes
     let origin_b = s_2.center - s_1.center;
     let origin_c = s_3.center - s_1.center;
+    let mut abc_normal = Matrix::cross(&origin_c, &origin_b); //Face normal of ABC
 
     // Identify trapezoid locations in the simplified basis
     let (mut vector_ef, mut vector_eg, mut vector_ehp, mut vector_ehn) =
         generate_trapezoids(&s_1.radius, &s_2.radius, &s_3.radius, &radius);
 
+    // Check an edge case for when B=G and C=F
+    let mut efg_normal = Matrix::cross(&vector_eg.coords, &vector_ef.coords);
+    let is_mirror = nalgebra::angle(&efg_normal, &abc_normal) == Real::pi();
+
     // Trapezoid tips must now be translated to D in the the ABCD coordinate system.
     // We denote x,y,z as H in trapeziod EFGH, setting E=A.
 
     // Rotate EF onto AB
-    let cross_ef_ab = Matrix::cross(&vector_ef.coords, &origin_b);
+    let cross_ef_ab = if is_mirror {
+        Matrix::cross(&vector_ef.coords, &origin_c)
+    } else {
+        Matrix::cross(&vector_ef.coords, &origin_b)
+    };
 
     // Only apply the rotation if needed
     if cross_ef_ab != empty {
-        let rot_1 = Rotation3::new(axis_angle(cross_ef_ab, vector_ef.coords, origin_b));
+        let rot_1 = if is_mirror {
+            Rotation3::new(axis_angle(cross_ef_ab, vector_ef.coords, origin_c))
+        } else {
+            Rotation3::new(axis_angle(cross_ef_ab, vector_ef.coords, origin_b))
+        };
 
         vector_ef = rot_1 * vector_ef;
         vector_eg = rot_1 * vector_eg;
@@ -195,8 +208,10 @@ fn identify_f(
     }
 
     // Rotate G to C by rotating the face normal of current triangle to the face normal of ABC
-    let efg_normal = Matrix::cross(&vector_eg.coords, &vector_ef.coords);
-    let abc_normal = Matrix::cross(&origin_c, &origin_b);
+    if is_mirror {
+        abc_normal = Matrix::cross(&origin_b, &origin_c);
+    }
+    efg_normal = Matrix::cross(&vector_eg.coords, &vector_ef.coords);
     let cross_normals = Matrix::cross(&efg_normal, &abc_normal);
 
     if cross_normals != empty {

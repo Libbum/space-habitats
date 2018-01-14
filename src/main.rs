@@ -185,7 +185,7 @@ fn main() {
     //let mut rng = rand::thread_rng();
     //let radii = repeat(between.ind_sample(&mut rng)).take(1000).collect::<VecDeque<f32>>();
 
-    let boundary = Sphere::new(at, 2.0);
+    let boundary = Sphere::new(at, 5.0);
     let radii: VecDeque<f32> = vec![0.7, 0.5, 0.35, 0.35, 0.25, 0.4]
         .into_iter()
         .collect();
