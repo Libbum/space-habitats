@@ -15,12 +15,15 @@ extern crate rand;
 mod sphere_packing;
 
 use std::collections::VecDeque;
-use nalgebra::{Vector3, UnitQuaternion, Point3, Translation3};
+use nalgebra::{Point3, Translation3};
 use rand::distributions::{IndependentSample, Range};
 use kiss3d::camera::ArcBall;
 use kiss3d::window::Window;
 use kiss3d::light::Light;
 use sphere_packing::{Sphere, pack_spheres};
+
+// For testing random spheres or using autorotation of the camera
+//use nalgebra::UnitQuaternion;
 //use std::iter::repeat;
 
 #[derive(Debug)]
@@ -181,11 +184,11 @@ fn main() {
     //}
 
     //---------------------------------
-    //let between = Range::new(0.1, 0.5);
+    //let between = Range::new(0.1, 0.2);
     //let mut rng = rand::thread_rng();
-    //let radii = repeat(between.ind_sample(&mut rng)).take(1000).collect::<VecDeque<f32>>();
+    //let radii = repeat(between.ind_sample(&mut rng)).take(10000).collect::<VecDeque<f32>>();
 
-    let boundary = Sphere::new(at, 5.0);
+    let boundary = Sphere::new(at, 3.0);
     let radii: VecDeque<f32> = vec![0.7, 0.5, 0.35, 0.35, 0.25, 0.4]
         .into_iter()
         .collect();
@@ -199,9 +202,11 @@ fn main() {
 
     //---------------------------------
 
-    let rot = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.014);
-
-    while window.render_with_camera(&mut camera) {
-        window.scene_mut().prepend_to_local_rotation(&rot);
+    while !window.should_close() {
+        window.render_with_camera(&mut camera);
     }
+    //let rot = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.014);
+    //while window.render_with_camera(&mut camera) {
+        //window.scene_mut().prepend_to_local_rotation(&rot);
+    //}
 }

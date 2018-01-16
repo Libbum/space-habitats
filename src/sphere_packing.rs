@@ -1,6 +1,5 @@
-use nalgebra::{self, Vector3, Real, Point3};
+use nalgebra::{self, Point3};
 use nalgebra::core::Matrix;
-use nalgebra::geometry::Rotation3;
 use rand::{self, Rng};
 use std::iter::repeat;
 use std::collections::VecDeque;
@@ -132,22 +131,14 @@ pub fn pack_spheres(container: Sphere, mut all_radii: VecDeque<f32>) -> Vec<Sphe
                 front.push(s_new.clone());
                 spheres.push(s_new.clone());
                 new_radius = radii.pop_front().unwrap_or_default();
-                println!(
-                    "A {:?}, B {:?}, C {:?}, D {:?}",
-                    curr_sphere,
-                    s_i,
-                    s_j,
-                    s_new
-                );
                 continue 'outer;
             }
         }
-        // This is a nightly function only
+        // NOTE: his is a nightly function only
         front.remove_item(&curr_sphere);
     }
     spheres
 }
-
 
 /// $f$ is as a set of spheres (or the empty set) such that they have a known `radius`,
 /// are in outer contact with `s_1`, `s_2` and `s_3` simultaneously, are completely
@@ -163,71 +154,73 @@ fn identify_f(
     radius: f32,
 ) -> Vec<Sphere> {
 
-    // If we use (mostly) the same conventions as `init_spheres`, we start
-    // with a base triangle at s_1=A(0,0,0), s_2=B(c,0,0), s_3=C(e,f.0) and look for solutions
-    // to s_4=D(x,y,z). Let AD=m, BD=n, CD=p we arrive at the equations
-    // x²+y²+z²=m²; (x−c)²+y²+z²=n²; (x−e)²+(y−f)²+z²=p². This doesn't give us the
-    // simplest solution to z, but it is what it is...
+    //The center points of s_1, s_2, s_3 are verticies of a tetrahedron, 
+    //and the distances d_1, d_2, d_3 can be defined as the distances from these points to 
+    //a fourth vertex s_4, whose coordinates x,y,z must be found. This satisfies the equations
+    // (x-x_1)^2+(y-y_1)^2+(z-z_1)^2=d_1^2 (1)
+    // (x-x_2)^2+(y-y_2)^2+(z-z_2)^2=d_2^2 (2)
+    // (x-x_3)^2+(y-y_3)^2+(z-z_3)^2=d_3^2 (3)
 
-    let empty = Vector3::new(0., 0., 0.); // A helper value, since nalgebra doesn't seem to have a method that's helpful here
-    // Remove ABC's translation component to compare rotation axes
-    let origin_b = s_2.center - s_1.center;
-    let origin_c = s_3.center - s_1.center;
-    let mut abc_normal = Matrix::cross(&origin_c, &origin_b); //Face normal of ABC
+    //To solve this system, we subtract (1) from (2) & (3), to obtain the (linear) equations of two planes.
+    //Coupling these planes to (1) we yield a quadratic system which takes the form
+    // \vec u\cdot\vec r=a
+    // \vec v\cdot\vec r=b
+    // \vec r\cdot\vec r+\vec w\cdot\vec r=c
 
-    // Identify trapezoid locations in the simplified basis
-    let (mut vector_ef, mut vector_eg, mut vector_ehp, mut vector_ehn) =
-        generate_trapezoids(&s_1.radius, &s_2.radius, &s_3.radius, &radius);
+    // With a little bit of magic following TODO: write blog post,
+    // we can solve this system to identify r in the form
+    // \vec r=\alpha\vec u+\beta\vec v+\gamma\vec t
+    // Where \gamma has a quadratic solution identifying our two solutions.
 
-    // Check an edge case for when B=G and C=F
-    let mut efg_normal = Matrix::cross(&vector_eg.coords, &vector_ef.coords);
-    let is_mirror = nalgebra::angle(&efg_normal, &abc_normal) == Real::pi();
+    let distance_14 = s_1.radius + radius;
+    let distance_24 = s_2.radius + radius;
+    let distance_34 = s_3.radius + radius;
 
-    // Trapezoid tips must now be translated to D in the the ABCD coordinate system.
-    // We denote x,y,z as H in trapeziod EFGH, setting E=A.
+    let vector_u = s_1.center - s_2.center;
+    let unitvector_u = vector_u / nalgebra::norm(&vector_u);
+    let vector_v = s_1.center - s_3.center;
+    let unitvector_v = vector_v / nalgebra::norm(&vector_v);
+    let cross_uv = Matrix::cross(&vector_u, &vector_v);
+    let unitvector_t = cross_uv/nalgebra::norm(&cross_uv);
+    let vector_w = -2. * s_1.center.coords;
 
-    // Rotate EF onto AB
-    let cross_ef_ab = if is_mirror {
-        Matrix::cross(&vector_ef.coords, &origin_c)
-    } else {
-        Matrix::cross(&vector_ef.coords, &origin_b)
-    };
+    let distance_a = (distance_24.powi(2) - distance_14.powi(2) + s_1.center.x.powi(2) +
+                          s_1.center.y.powi(2) + s_1.center.z.powi(2) -
+                          s_2.center.x.powi(2) -
+                          s_2.center.y.powi(2) - s_2.center.z.powi(2)) /
+        (2. * nalgebra::norm(&vector_u));
+    let distance_b = (distance_34.powi(2) - distance_14.powi(2) + s_1.center.x.powi(2) +
+                          s_1.center.y.powi(2) + s_1.center.z.powi(2) -
+                          s_3.center.x.powi(2) -
+                          s_3.center.y.powi(2) - s_3.center.z.powi(2)) /
+        (2. * nalgebra::norm(&vector_v));
+    let distance_c = distance_14.powi(2) - s_1.center.x.powi(2) - s_1.center.y.powi(2) -
+        s_1.center.z.powi(2);
 
-    // Only apply the rotation if needed
-    if cross_ef_ab != empty {
-        let rot_1 = if is_mirror {
-            Rotation3::new(axis_angle(cross_ef_ab, vector_ef.coords, origin_c))
-        } else {
-            Rotation3::new(axis_angle(cross_ef_ab, vector_ef.coords, origin_b))
-        };
+    let dot_uv = nalgebra::dot(&unitvector_u, &unitvector_v);
+    let dot_wt = nalgebra::dot(&vector_w, &unitvector_t);
+    let dot_uw = nalgebra::dot(&unitvector_u, &vector_w);
+    let dot_vw = nalgebra::dot(&unitvector_v, &vector_w);
 
-        vector_ef = rot_1 * vector_ef;
-        vector_eg = rot_1 * vector_eg;
-        vector_ehp = rot_1 * vector_ehp;
-        vector_ehn = rot_1 * vector_ehn;
-    }
+    let alpha = (distance_a - distance_b * dot_uv) / (1. - dot_uv.powi(2));
+    let beta = (distance_b - distance_a * dot_uv) / (1. - dot_uv.powi(2));
+    let value_d = alpha.powi(2) + beta.powi(2) + 2. * alpha * beta * dot_uv + alpha * dot_uw +
+        beta * dot_vw - distance_c;
+    let gamma_pos = 0.5 * (-dot_wt + (dot_wt.powi(2) - 4. * value_d).sqrt());
+    let gamma_neg = 0.5 * (-dot_wt - (dot_wt.powi(2) - 4. * value_d).sqrt());
 
-    // Rotate G to C by rotating the face normal of current triangle to the face normal of ABC
-    if is_mirror {
-        abc_normal = Matrix::cross(&origin_b, &origin_c);
-    }
-    efg_normal = Matrix::cross(&vector_eg.coords, &vector_ef.coords);
-    let cross_normals = Matrix::cross(&efg_normal, &abc_normal);
-
-    if cross_normals != empty {
-        let rot_2 = Rotation3::new(axis_angle(cross_normals, efg_normal, abc_normal));
-
-        vector_ehp = rot_2 * vector_ehp;
-        vector_ehn = rot_2 * vector_ehn;
-    }
-
-    // Translate points to the ABCD basis
-    vector_ehp.coords += s_1.center.coords;
-    vector_ehn.coords += s_1.center.coords;
-
-    // Generate new shperes using rotated coordinates, translated to A's basis
-    let s_4_positive = Sphere::new(vector_ehp, radius);
-    let s_4_negative = Sphere::new(vector_ehn, radius);
+    let s_4_positive = Sphere::new(
+        Point3::from_coordinates(
+            alpha * unitvector_u + beta * unitvector_v + gamma_pos * unitvector_t,
+        ),
+        radius,
+    );
+    let s_4_negative = Sphere::new(
+        Point3::from_coordinates(
+            alpha * unitvector_u + beta * unitvector_v + gamma_neg * unitvector_t,
+        ),
+        radius,
+    );
 
     let mut f = Vec::new();
     // Make sure the spheres are bounded by the containing geometry and do not overlap any spheres in V
@@ -264,53 +257,3 @@ fn pairs(set: &[Sphere]) -> Vec<(&Sphere, &Sphere)> {
     }
 }
 
-/// Generates trapezoids in the simplest base coordinates from known radii of a set of tangent spheres (`r_1` to `r_3`)
-/// and a new tangent sphere with known `radius` but unknown position.
-/// Returns locations to points C and B from a commoo origin A, along with locations of the two possible trapezoid tip locations.
-fn generate_trapezoids(
-    r_1: &f32,
-    r_2: &f32,
-    r_3: &f32,
-    radius: &f32,
-) -> (Point3<f32>, Point3<f32>, Point3<f32>, Point3<f32>) {
-
-    // First, translate values of our spheres onto a cordinate system A(0,0,0), B(c,0,0), C(e,f,0), D(x,y,z)
-    // so we can use these minimal equations. Here, let m = AD, n = BD, p = CD be distances between points
-    let value_c = r_1 + r_2;
-    let value_e = ((r_1 + r_3).powi(2) + value_c.powi(2) - (r_2 + r_3).powi(2)) / (2. * value_c);
-    let value_f = ((r_1 + r_3).powi(2) - value_e.powi(2)).sqrt();
-    let distance_m = r_1 + radius;
-    let distance_n = r_2 + radius;
-    let distance_p = r_3 + radius;
-
-    // Identify D(x,y,z)
-    let x = (distance_m.powi(2) - distance_n.powi(2) + value_c.powi(2)) / (2. * value_c);
-    let y = (value_f.powi(2) * value_c + distance_m.powi(2) * value_c -
-                 value_e * distance_m.powi(2) + value_e * distance_n.powi(2) -
-                 distance_p.powi(2) * value_c - value_e * value_c.powi(2) +
-                 value_e.powi(2) * value_c) /
-        (2. * value_f * value_c);
-    let z = (distance_m.powi(2) - x.powi(2) - y.powi(2)).sqrt();
-
-    // Generate EFGH points for rotation
-    let point_b = Point3::new(value_c, 0., 0.);
-    let point_c = Point3::new(value_e, value_f, 0.);
-    // Our two found trapezoid tips:
-    let point_d_positive = Point3::new(x, y, z);
-    let point_d_negative = Point3::new(x, y, -z);
-
-    (point_b, point_c, point_d_positive, point_d_negative)
-}
-
-
-/// Find the rotation axis angle vector $\vec{r} = \theta\hat{e}$ given the un-normalised rotation axis vector
-/// and the two (un-normalised) vectors for which the rotation is to be mapped.
-fn axis_angle(axis: Vector3<f32>, source: Vector3<f32>, target: Vector3<f32>) -> Vector3<f32> {
-    let rotation_axis = axis / nalgebra::norm(&axis);
-
-    let norm_source = source / nalgebra::norm(&source);
-    let norm_target = target / nalgebra::norm(&target);
-    let rotation_angle = Real::acos(nalgebra::dot(&norm_source, &norm_target));
-
-    rotation_angle * rotation_axis
-}
