@@ -116,9 +116,9 @@ pub fn pack_spheres(container: Sphere, mut all_radii: VecDeque<f32>) -> Vec<Sphe
             .clone()
             .into_iter()
             .filter(|s_dash| {
-                s_dash != &curr_sphere &&
-                    nalgebra::distance(&curr_sphere.center, &s_dash.center) <=
-                        curr_sphere.radius + s_dash.radius + 2. * new_radius
+                s_dash != &curr_sphere
+                    && nalgebra::distance(&curr_sphere.center, &s_dash.center)
+                        <= curr_sphere.radius + s_dash.radius + 2. * new_radius
             })
             .collect::<Vec<_>>();
 
@@ -153,9 +153,8 @@ fn identify_f(
     set_v: &Vec<Sphere>,
     radius: f32,
 ) -> Vec<Sphere> {
-
-    //The center points of s_1, s_2, s_3 are verticies of a tetrahedron, 
-    //and the distances d_1, d_2, d_3 can be defined as the distances from these points to 
+    //The center points of s_1, s_2, s_3 are verticies of a tetrahedron,
+    //and the distances d_1, d_2, d_3 can be defined as the distances from these points to
     //a fourth vertex s_4, whose coordinates x,y,z must be found. This satisfies the equations
     // (x-x_1)^2+(y-y_1)^2+(z-z_1)^2=d_1^2 (1)
     // (x-x_2)^2+(y-y_2)^2+(z-z_2)^2=d_2^2 (2)
@@ -181,21 +180,19 @@ fn identify_f(
     let vector_v = s_1.center - s_3.center;
     let unitvector_v = vector_v / nalgebra::norm(&vector_v);
     let cross_uv = Matrix::cross(&vector_u, &vector_v);
-    let unitvector_t = cross_uv/nalgebra::norm(&cross_uv);
+    let unitvector_t = cross_uv / nalgebra::norm(&cross_uv);
     let vector_w = -2. * s_1.center.coords;
 
-    let distance_a = (distance_24.powi(2) - distance_14.powi(2) + s_1.center.x.powi(2) +
-                          s_1.center.y.powi(2) + s_1.center.z.powi(2) -
-                          s_2.center.x.powi(2) -
-                          s_2.center.y.powi(2) - s_2.center.z.powi(2)) /
-        (2. * nalgebra::norm(&vector_u));
-    let distance_b = (distance_34.powi(2) - distance_14.powi(2) + s_1.center.x.powi(2) +
-                          s_1.center.y.powi(2) + s_1.center.z.powi(2) -
-                          s_3.center.x.powi(2) -
-                          s_3.center.y.powi(2) - s_3.center.z.powi(2)) /
-        (2. * nalgebra::norm(&vector_v));
-    let distance_c = distance_14.powi(2) - s_1.center.x.powi(2) - s_1.center.y.powi(2) -
-        s_1.center.z.powi(2);
+    let distance_a = (distance_24.powi(2) - distance_14.powi(2) + s_1.center.x.powi(2)
+        + s_1.center.y.powi(2) + s_1.center.z.powi(2) - s_2.center.x.powi(2)
+        - s_2.center.y.powi(2) - s_2.center.z.powi(2))
+        / (2. * nalgebra::norm(&vector_u));
+    let distance_b = (distance_34.powi(2) - distance_14.powi(2) + s_1.center.x.powi(2)
+        + s_1.center.y.powi(2) + s_1.center.z.powi(2) - s_3.center.x.powi(2)
+        - s_3.center.y.powi(2) - s_3.center.z.powi(2))
+        / (2. * nalgebra::norm(&vector_v));
+    let distance_c =
+        distance_14.powi(2) - s_1.center.x.powi(2) - s_1.center.y.powi(2) - s_1.center.z.powi(2);
 
     let dot_uv = nalgebra::dot(&unitvector_u, &unitvector_v);
     let dot_wt = nalgebra::dot(&vector_w, &unitvector_t);
@@ -204,8 +201,8 @@ fn identify_f(
 
     let alpha = (distance_a - distance_b * dot_uv) / (1. - dot_uv.powi(2));
     let beta = (distance_b - distance_a * dot_uv) / (1. - dot_uv.powi(2));
-    let value_d = alpha.powi(2) + beta.powi(2) + 2. * alpha * beta * dot_uv + alpha * dot_uw +
-        beta * dot_vw - distance_c;
+    let value_d = alpha.powi(2) + beta.powi(2) + 2. * alpha * beta * dot_uv + alpha * dot_uw
+        + beta * dot_vw - distance_c;
     let gamma_pos = 0.5 * (-dot_wt + (dot_wt.powi(2) - 4. * value_d).sqrt());
     let gamma_neg = 0.5 * (-dot_wt - (dot_wt.powi(2) - 4. * value_d).sqrt());
 
@@ -256,4 +253,3 @@ fn pairs(set: &[Sphere]) -> Vec<(&Sphere, &Sphere)> {
         vec_pairs
     }
 }
-

@@ -7,4 +7,5 @@ authors = ["Tim DuBois <tim@neophilus.net>"]
 kiss3d = "0.12"
 nalgebra = "0.13"
 rand = "0.4"
+petgraph = { version = "0.4", features = ["serde-1"] }
 #glfw = "0.19"
