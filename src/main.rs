@@ -13,6 +13,8 @@ extern crate rand;
 /// Implementation of a modified version of the advancing front packing algorithm from
 /// Valera *et al.*, [Computational Particle Mechanics 2, 161 (2015)](https://doi.org/10.1007/s40571-015-0045-8).
 mod sphere_packing;
+/// Handles any errors that could occur during habitat optimisation.
+mod errors;
 
 use std::collections::VecDeque;
 use nalgebra::{Point3, Translation3};
@@ -188,12 +190,12 @@ fn main() {
     //let mut rng = rand::thread_rng();
     //let radii = repeat(between.ind_sample(&mut rng)).take(10000).collect::<VecDeque<f32>>();
 
-    let boundary = Sphere::new(at, 3.0);
+    let boundary = Sphere::new(at, 3.0).unwrap();
     let radii: VecDeque<f32> = vec![0.7, 0.5, 0.35, 0.35, 0.25, 0.4]
         .into_iter()
         .collect();
 
-    let spheres = pack_spheres(boundary, radii);
+    let spheres = pack_spheres(&boundary, radii).unwrap();
     for sphere in spheres.iter() {
         let mut draw_room = window.add_sphere(sphere.radius);
         draw_room.set_color(rand::random(), rand::random(), rand::random());
