@@ -1,11 +1,11 @@
-use nalgebra::{self, Point3};
-use nalgebra::core::Matrix;
-use rand::{self, Rng};
-use std::iter::repeat;
 use errors::SpaceHabitatsError as Error;
+use nalgebra::core::Matrix;
+use nalgebra::{self, Point3};
+use rand::prelude::*;
 use std::collections::VecDeque;
-use std::fmt;
 use std::f32::consts::FRAC_PI_3;
+use std::fmt;
+use std::iter::repeat;
 
 #[derive(PartialEq, Debug, Clone)]
 /// Constructs a sphere located at `center` in Euclidean space with a given `radius`.
@@ -22,10 +22,7 @@ impl Sphere {
         if radius <= 0.0 {
             Err(Error::NegativeRadius)
         } else {
-            Ok(Sphere {
-                center: center,
-                radius: radius,
-            })
+            Ok(Sphere { center, radius })
         }
     }
 
@@ -151,7 +148,7 @@ pub fn pack_spheres<C: Container>(
 
     'outer: while !front.is_empty() {
         // s₀ := s(c₀, r₀) picked at random from F
-        let curr_sphere = rng.choose(&front).ok_or(Error::NoneFront)?.clone();
+        let curr_sphere = front.choose(&mut rng).ok_or(Error::NoneFront)?.clone();
         // V := {s(c', r') ∈ S : d(c₀, c') ≤ r₀ + r' + 2r}
         let set_v = spheres
             .iter()
@@ -164,11 +161,11 @@ pub fn pack_spheres<C: Container>(
             .collect::<Vec<_>>();
 
         for (s_i, s_j) in pairs(&set_v) {
-            let mut set_f = identify_f(&curr_sphere, s_i, s_j, container, &set_v, new_radius)?;
+            let set_f = identify_f(&curr_sphere, s_i, s_j, container, &set_v, new_radius)?;
             if !set_f.is_empty() {
                 // Found at least one position to place the sphere,
                 // choose one and move on
-                let s_new = rng.choose(&set_f).ok_or(Error::NoneSetF)?;
+                let s_new = set_f.choose(&mut rng).ok_or(Error::NoneSetF)?;
                 front.push(s_new.clone());
                 spheres.push(s_new.to_owned());
                 new_radius = radii.pop_front().unwrap_or_default();
@@ -191,7 +188,7 @@ fn identify_f<C: Container>(
     s_2: &Sphere,
     s_3: &Sphere,
     container: &C,
-    set_v: &Vec<Sphere>,
+    set_v: &[Sphere],
     radius: f32,
 ) -> Result<Vec<Sphere>, Error> {
     //The center points of s_1, s_2, s_3 are verticies of a tetrahedron,
@@ -217,33 +214,42 @@ fn identify_f<C: Container>(
     let distance_34 = s_3.radius + radius;
 
     let vector_u = s_1.center - s_2.center;
-    let unitvector_u = vector_u / nalgebra::norm(&vector_u);
+    let unitvector_u = vector_u / Matrix::norm(&vector_u);
     let vector_v = s_1.center - s_3.center;
-    let unitvector_v = vector_v / nalgebra::norm(&vector_v);
+    let unitvector_v = vector_v / Matrix::norm(&vector_v);
     let cross_uv = Matrix::cross(&vector_u, &vector_v);
-    let unitvector_t = cross_uv / nalgebra::norm(&cross_uv);
+    let unitvector_t = cross_uv / Matrix::norm(&cross_uv);
     let vector_w = -2. * s_1.center.coords;
 
-    let distance_a = (distance_24.powi(2) - distance_14.powi(2) + s_1.center.x.powi(2)
-        + s_1.center.y.powi(2) + s_1.center.z.powi(2) - s_2.center.x.powi(2)
-        - s_2.center.y.powi(2) - s_2.center.z.powi(2))
-        / (2. * nalgebra::norm(&vector_u));
-    let distance_b = (distance_34.powi(2) - distance_14.powi(2) + s_1.center.x.powi(2)
-        + s_1.center.y.powi(2) + s_1.center.z.powi(2) - s_3.center.x.powi(2)
-        - s_3.center.y.powi(2) - s_3.center.z.powi(2))
-        / (2. * nalgebra::norm(&vector_v));
+    let distance_a = (distance_24.powi(2) - distance_14.powi(2)
+        + s_1.center.x.powi(2)
+        + s_1.center.y.powi(2)
+        + s_1.center.z.powi(2)
+        - s_2.center.x.powi(2)
+        - s_2.center.y.powi(2)
+        - s_2.center.z.powi(2))
+        / (2. * Matrix::norm(&vector_u));
+    let distance_b = (distance_34.powi(2) - distance_14.powi(2)
+        + s_1.center.x.powi(2)
+        + s_1.center.y.powi(2)
+        + s_1.center.z.powi(2)
+        - s_3.center.x.powi(2)
+        - s_3.center.y.powi(2)
+        - s_3.center.z.powi(2))
+        / (2. * Matrix::norm(&vector_v));
     let distance_c =
         distance_14.powi(2) - s_1.center.x.powi(2) - s_1.center.y.powi(2) - s_1.center.z.powi(2);
 
-    let dot_uv = nalgebra::dot(&unitvector_u, &unitvector_v);
-    let dot_wt = nalgebra::dot(&vector_w, &unitvector_t);
-    let dot_uw = nalgebra::dot(&unitvector_u, &vector_w);
-    let dot_vw = nalgebra::dot(&unitvector_v, &vector_w);
+    let dot_uv = Matrix::dot(&unitvector_u, &unitvector_v);
+    let dot_wt = Matrix::dot(&vector_w, &unitvector_t);
+    let dot_uw = Matrix::dot(&unitvector_u, &vector_w);
+    let dot_vw = Matrix::dot(&unitvector_v, &vector_w);
 
     let alpha = (distance_a - distance_b * dot_uv) / (1. - dot_uv.powi(2));
     let beta = (distance_b - distance_a * dot_uv) / (1. - dot_uv.powi(2));
-    let value_d = alpha.powi(2) + beta.powi(2) + 2. * alpha * beta * dot_uv + alpha * dot_uw
-        + beta * dot_vw - distance_c;
+    let value_d =
+        alpha.powi(2) + beta.powi(2) + 2. * alpha * beta * dot_uv + alpha * dot_uw + beta * dot_vw
+            - distance_c;
     let dot_wt_2 = dot_wt.powi(2);
     let value_4d = 4. * value_d;
 
@@ -256,15 +262,11 @@ fn identify_f<C: Container>(
         let gamma_neg = 0.5 * (-dot_wt - (dot_wt.powi(2) - 4. * value_d).sqrt());
 
         let s_4_positive = Sphere::new(
-            Point3::from_coordinates(
-                alpha * unitvector_u + beta * unitvector_v + gamma_pos * unitvector_t,
-            ),
+            Point3::from(alpha * unitvector_u + beta * unitvector_v + gamma_pos * unitvector_t),
             radius,
         )?;
         let s_4_negative = Sphere::new(
-            Point3::from_coordinates(
-                alpha * unitvector_u + beta * unitvector_v + gamma_neg * unitvector_t,
-            ),
+            Point3::from(alpha * unitvector_u + beta * unitvector_v + gamma_neg * unitvector_t),
             radius,
         )?;
 
@@ -293,10 +295,12 @@ fn pairs(set: &[Sphere]) -> Vec<(&Sphere, &Sphere)> {
             // 0..n - m, but m = 2 and rust is non inclusive with its for loops
             for k in 0..n - 1 {
                 let subset = &set[k + 1..n];
-                vec_pairs.append(&mut subset
-                    .iter()
-                    .zip(repeat(&set[k]).take(subset.len()))
-                    .collect::<Vec<_>>());
+                vec_pairs.append(
+                    &mut subset
+                        .iter()
+                        .zip(repeat(&set[k]).take(subset.len()))
+                        .collect::<Vec<_>>(),
+                );
             }
         }
         vec_pairs

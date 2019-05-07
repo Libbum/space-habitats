@@ -10,19 +10,20 @@ extern crate kiss3d;
 extern crate nalgebra;
 extern crate rand;
 
+/// Handles any errors that could occur during habitat optimisation.
+mod errors;
 /// Implementation of a modified version of the advancing front packing algorithm from
 /// Valera *et al.*, [Computational Particle Mechanics 2, 161 (2015)](https://doi.org/10.1007/s40571-015-0045-8).
 mod sphere_packing;
-/// Handles any errors that could occur during habitat optimisation.
-mod errors;
 
-use std::collections::VecDeque;
-use nalgebra::{Point3, Translation3};
-use rand::distributions::{IndependentSample, Range};
 use kiss3d::camera::ArcBall;
-use kiss3d::window::Window;
 use kiss3d::light::Light;
-use sphere_packing::{Sphere, pack_spheres};
+use kiss3d::window::Window;
+use nalgebra::{Point3, Translation3};
+use rand::distributions::Uniform;
+use rand::prelude::*;
+use sphere_packing::{pack_spheres, Sphere};
+use std::collections::VecDeque;
 
 // For testing random spheres or using autorotation of the camera
 //use nalgebra::UnitQuaternion;
@@ -49,13 +50,12 @@ impl Room {
     fn new(name: &str, radius: f32, color: Color, position: Point3<f32>) -> Room {
         Room {
             name: name.to_string(),
-            radius: radius,
-            color: color,
-            position: position,
+            radius,
+            color,
+            position,
         }
     }
 }
-
 
 #[derive(Debug)]
 /// Simple representation of an rgb color. Kiss3D requires values on $[0.0, 1.0]$.
@@ -68,35 +68,31 @@ struct Color {
 impl Color {
     /// Constructs a `new` color based on rgb values between 0 and 1.
     fn new(red: f32, green: f32, blue: f32) -> Color {
-        Color {
-            red: red,
-            green: green,
-            blue: blue,
-        }
+        Color { red, green, blue }
     }
 }
 
 /// Makes sure randomly added rooms to not lie inside or overlap with another room. Only needed for testing.
 fn find_disjoint_position(
-    from: &Vec<Room>,
+    from: &[Room],
     distance: f32,
-    between: &Range<f32>,
-    rng: &mut rand::ThreadRng,
+    between: Uniform<f32>,
+    rng: &mut ThreadRng,
 ) -> Point3<f32> {
     let mut new_point = Point3::new(
-        between.ind_sample(rng),
-        between.ind_sample(rng),
-        between.ind_sample(rng),
+        rng.sample(between),
+        rng.sample(between),
+        rng.sample(between),
     );
     loop {
-        if from.iter().any(|ref r| {
-            nalgebra::distance(&new_point, &r.position) < distance
-        })
+        if from
+            .iter()
+            .any(|ref r| nalgebra::distance(&new_point, &r.position) < distance)
         {
             new_point = Point3::new(
-                between.ind_sample(rng),
-                between.ind_sample(rng),
-                between.ind_sample(rng),
+                rng.sample(between),
+                rng.sample(between),
+                rng.sample(between),
             );
         } else {
             return new_point;
@@ -106,17 +102,17 @@ fn find_disjoint_position(
 
 /// Simple room constructor, currently hardcoded for testing and will most likely be removed in the future.
 fn construct_rooms() -> Vec<Room> {
-    let between = Range::new(-1.5, 1.5);
-    let mut rng = rand::thread_rng();
+    let mut rng = thread_rng();
+    let between = Uniform::new(-1.5, 1.5);
 
     //For now, this is hardcoded since it's known, but later this will need to be identified first
     let max_distance = 1.2; //Radius of Sleep + Leisure
 
     let mut rooms = Vec::new();
     let mut new_position = Point3::new(
-        between.ind_sample(&mut rng),
-        between.ind_sample(&mut rng),
-        between.ind_sample(&mut rng),
+        rng.sample(between),
+        rng.sample(between),
+        rng.sample(between),
     );
 
     rooms.push(Room::new(
@@ -126,7 +122,7 @@ fn construct_rooms() -> Vec<Room> {
         new_position,
     ));
 
-    new_position = find_disjoint_position(&rooms, max_distance, &between, &mut rng);
+    new_position = find_disjoint_position(&rooms, max_distance, between, &mut rng);
     rooms.push(Room::new(
         "Leisure",
         0.5,
@@ -134,7 +130,7 @@ fn construct_rooms() -> Vec<Room> {
         new_position,
     ));
 
-    new_position = find_disjoint_position(&rooms, max_distance, &between, &mut rng);
+    new_position = find_disjoint_position(&rooms, max_distance, between, &mut rng);
     rooms.push(Room::new(
         "Food",
         0.35,
@@ -142,7 +138,7 @@ fn construct_rooms() -> Vec<Room> {
         new_position,
     ));
 
-    new_position = find_disjoint_position(&rooms, max_distance, &between, &mut rng);
+    new_position = find_disjoint_position(&rooms, max_distance, between, &mut rng);
     rooms.push(Room::new(
         "Work/Lab",
         0.35,
@@ -150,7 +146,7 @@ fn construct_rooms() -> Vec<Room> {
         new_position,
     ));
 
-    new_position = find_disjoint_position(&rooms, max_distance, &between, &mut rng);
+    new_position = find_disjoint_position(&rooms, max_distance, between, &mut rng);
     rooms.push(Room::new(
         "Greenhouse",
         0.25,
@@ -158,7 +154,7 @@ fn construct_rooms() -> Vec<Room> {
         new_position,
     ));
 
-    new_position = find_disjoint_position(&rooms, max_distance, &between, &mut rng);
+    new_position = find_disjoint_position(&rooms, max_distance, between, &mut rng);
     rooms.push(Room::new(
         "Sport",
         0.4,
@@ -170,7 +166,6 @@ fn construct_rooms() -> Vec<Room> {
 
 /// Program entry point.
 fn main() {
-
     let eye = Point3::new(3.0, 3.0, 3.0);
     let at = Point3::origin();
     let mut camera = ArcBall::new(eye, at);
@@ -182,24 +177,22 @@ fn main() {
     //for room in habitat.iter() {
     //    let mut draw_room = window.add_sphere(room.radius);
     //    draw_room.set_color(room.color.red, room.color.green, room.color.blue);
-    //    draw_room.set_local_translation(Translation3::from_vector(room.position.coords));
+    //    draw_room.set_local_translation(Translation3::from(room.position.coords));
     //}
 
     //---------------------------------
-    //let between = Range::new(0.1, 0.2);
-    //let mut rng = rand::thread_rng();
+    //let between = rng.gen_range(0.1, 0.2);
+    //let mut rng = thread_rng();
     //let radii = repeat(between.ind_sample(&mut rng)).take(10000).collect::<VecDeque<f32>>();
 
     let boundary = Sphere::new(at, 3.0).unwrap();
-    let radii: VecDeque<f32> = vec![0.7, 0.5, 0.35, 0.35, 0.25, 0.4]
-        .into_iter()
-        .collect();
+    let radii: VecDeque<f32> = vec![0.7, 0.5, 0.35, 0.35, 0.25, 0.4].into_iter().collect();
 
     let spheres = pack_spheres(&boundary, radii).unwrap();
     for sphere in spheres.iter() {
         let mut draw_room = window.add_sphere(sphere.radius);
-        draw_room.set_color(rand::random(), rand::random(), rand::random());
-        draw_room.set_local_translation(Translation3::from_vector(sphere.center.coords));
+        draw_room.set_color(random(), random(), random());
+        draw_room.set_local_translation(Translation3::from(sphere.center.coords));
     }
 
     //---------------------------------
@@ -209,6 +202,6 @@ fn main() {
     }
     //let rot = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), 0.014);
     //while window.render_with_camera(&mut camera) {
-        //window.scene_mut().prepend_to_local_rotation(&rot);
+    //window.scene_mut().prepend_to_local_rotation(&rot);
     //}
 }
